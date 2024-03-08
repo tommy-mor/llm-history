@@ -2,6 +2,7 @@
   (:require [contrib.str :refer [empty->nil]]
             [hyperfiddle.electric :as e]
             [hyperfiddle.electric-dom2 :as dom]
+            [missionary.core :as m]
             #?(:clj [electric-starter-app.llm :as llm])))
 
 
@@ -11,12 +12,13 @@
   (e/client
     (binding [dom/node js/document.body]
       (dom/h1 (dom/text "ramblr"))
-      (let [!val (atom nil) val (e/watch !val) ]
+      (let [!val (atom nil) val (e/watch !val)
+            llmstream (e/fn [] (e/server (m/? (llm/llm-stream "hello who are you"))))]
         (dom/input
-                (dom/props {:placeholder "Type a message" :maxlength 100})
-                (dom/on "keydown" (e/fn [e]
-                                    (when (= "Enter" (.-key e))
-                                      (when-some [v (empty->nil (.. e -target -value))]
-                                        (set! (.-value dom/node) "")
-                                        (reset! !val v))))))
-        (dom/h3 (dom/text (e/server (llm/ask val))))))))
+         (dom/props {:placeholder "Type a message" :maxlength 100})
+         (dom/on "keydown" (e/fn [e]
+                             (when (= "Enter" (.-key e))
+                               (when-some [v (empty->nil (.. e -target -value))]
+                                 (set! (.-value dom/node) "")
+                                 (reset! !val v))))))
+        (dom/h3 (dom/text (str "hello: " (llmstream.))))))))
