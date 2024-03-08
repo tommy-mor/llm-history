@@ -5,8 +5,9 @@
            org.clojure/tools.logging      {:mvn/version "1.2.4"}
            ch.qos.logback/logback-classic {:mvn/version "1.4.14"}
 
+           cheshire/cheshire {:mvn/version "5.12.0"}
 
-           io.github.zmedelis/bosquet {:mvn/version "2024.02.22"}}
+           clj-http/clj-http {:mvn/version "3.12.3"}}
  :paths   ["src" "resources"]
  :aliases {:dev
            {:extra-paths ["src-dev"]

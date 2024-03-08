@@ -18,5 +18,5 @@
                                     (when (= "Enter" (.-key e))
                                       (when-some [v (empty->nil (.. e -target -value))]
                                         (set! (.-value dom/node) "")
-                                        (reset! !val (js/parseInt v)))))))
-        (dom/h3 (dom/text (e/server (llm/plus val))))))))
+                                        (reset! !val v))))))
+        (dom/h3 (dom/text (e/server (llm/ask val))))))))
