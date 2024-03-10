@@ -49,6 +49,7 @@
                     :body (json/parse-string true) :public)
                 (map :title)
                 (filter #(clojure.string/starts-with? % "log"))
+                (sort)
                 last)
         st (inc (Integer/parseInt (last (clojure.string/split st #"log" 2))))]
     (-> (client/post "http://localhost:3000/api/tag"
@@ -58,30 +59,63 @@
                       :form-params {:title (str "log" st) :description ""}})
         :body (json/parse-string true) :id)))
 
-(def tagid 110)
+(def tagid (new-tag))
 
 (defn get-ranking [tagid]
   (-> (client/get (str "http://localhost:3000/api/tag/page?id=" tagid)
                   {:headers {"Content-type" "application/json"
                              "Cookie" cookie}
                    :content-type :json})
-      :body (json/parse-string true) :sorted ))
+      :body (json/parse-string true)))
+
+(defn get-pair [tagid]
+  (let [{:keys [sorted unsorted]} (get-ranking tagid)]
+    (if (not-empty unsorted)
+      [(first unsorted) (first sorted)]
+      (take 2 sorted))))
 
 
-(defn vote-top [tagid]
-  (let [[fst snd] (take 2 (get-ranking tagid))]
+(defn parse-magnitude [resp]
+  (case resp
+    "AAA" 10
+    "AA" 20
+    "A" 40
+    "B" 60
+    "BB" 80
+    "BBB" 90
+    _ (do
+        (println "unusual resp" resp)
+        50)))
+
+(defn vote-pair [tagid]
+  (let [[fst snd] (:pair (get-ranking tagid))]
     (def fst fst)
     (def snd snd)
 
     (def resp (ask-ant (sel/render "here are two thoughts, A\n: \"{{a}}\" \n\n B:\n \"{{b}}\"\n\nwhich one do you like better. Respond only with a single letter, or multiple letters if you like it a lot more."
                                    {:a (:title fst) :b (:title snd)})))
 
-    (def magnitude (case resp
-                     "A" 20
-                     "B" 80
-                     _ (do
-                         (println "unusual resp" resp)
-                         50)))
+    (def magnitude (parse-magnitude resp))
+    (client/post "http://localhost:3000/api/vote"
+                 {:headers {"Content-type" "application/json"
+                            "Cookie" cookie}
+                  :content-type :json
+                  :form-params
+                  {:tag_id tagid
+                   :left_item_id (:id fst)
+                   :right_item_id (:id snd)
+                   :magnitude magnitude
+                   :attribute 0}})))
+
+(defn vote-top [tagid]
+  (let [[fst snd] (get-pair tagid)]
+    (def fst fst)
+    (def snd snd)
+
+    (def resp (ask-ant (sel/render "here are two thoughts, A\n: \"{{a}}\" \n\n B:\n \"{{b}}\"\n\nwhich one do you like better. Respond only with a single letter, or multiple letters if you like it a lot more."
+                                   {:a (:title fst) :b (:title snd)})))
+
+    (def magnitude (parse-magnitude resp))
     (client/post "http://localhost:3000/api/vote"
                  {:headers {"Content-type" "application/json"
                             "Cookie" cookie}
@@ -94,22 +128,57 @@
                    :attribute 0}})))
 
 (defn interpolate [tagid]
-  (let [[fst snd] (take 2 (get-ranking tagid))]
+  (let [[fst snd] (take 2 (:sorted (get-ranking tagid)))]
     (def fst fst)
     (def snd snd)
 
-    "template to vote between pairs"
-    "submit vote"
-    ))
+    (def resp (ask-ant (sel/render "here are two thoughts, A\n: \"{{a}}\" \n\n C:\n \"{{b}} \"\n\nwrite thought B which is a middle ground between A and C. a logical interpolation of the two. Don't comment on it, just say the interpolation only\n\nB:\n"
+                                   {:a (:title fst) :b (:title snd)})))
+    (client/post "http://localhost:3000/api/item"
+                 {:headers {"Content-type" "application/json"
+                            "Cookie" cookie}
+                  :content-type :json
+                  :form-params
+                  {:body ""
+                   :tag_id tagid
+                   :title (clojure.string/replace resp #"B:" "")
+                   :url ""}})))
 
 (defn extrapolate [tagid]
-  (let [[fst snd] (take 2 (get-ranking tagid))]
+  (let [[fst snd] (take 2 (:sorted (get-ranking tagid)))]
     (def fst fst)
     (def snd snd)
 
-    "template to vote between pairs"
-    "submit vote"
-    ))
+    (def resp (ask-ant (sel/render "here are two thoughts, A\n: {{a}} \n\n B:\n {{b}}\n\nwrite thought C which is a implication of A and B. Don't comment on it, just say the corollary only\n\nC:\n"
+                                   {:a (:title fst) :b (:title snd)})))
+    
+    (client/post "http://localhost:3000/api/item"
+                 {:headers {"Content-type" "application/json"
+                            "Cookie" cookie}
+                  :content-type :json
+                  :form-params
+                  {:body ""
+                   :tag_id tagid
+                   :title (clojure.string/replace resp #"C:" "")
+                   :url ""}})))
+
+(defn inverse [tagid]
+  (let [[fst snd] (take 2 (:sorted (get-ranking tagid)))]
+    (def fst fst)
+    (def snd snd)
+
+    (def resp (ask-ant (sel/render "here are two thoughts, A\n: {{a}} \n\n B:\n {{b}}\n\nwrite thought C which is the inverse of A and B. but you agree with C. Don't comment on it, just say the corollary only\n\nC:\n"
+                                   {:a (:title fst) :b (:title snd)})))
+    
+    (client/post "http://localhost:3000/api/item"
+                 {:headers {"Content-type" "application/json"
+                            "Cookie" cookie}
+                  :content-type :json
+                  :form-params
+                  {:body ""
+                   :tag_id tagid
+                   :title (clojure.string/replace resp #"C:" "")
+                   :url ""}})))
 
 (comment
   (def r (ask-ant "hello"))
