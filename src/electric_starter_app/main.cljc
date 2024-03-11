@@ -15,20 +15,11 @@
   (e/client
    (binding [dom/node js/document.body]
      (let [!val (atom nil) val (e/watch !val)]
-       (comment (dom/input
-                 (dom/props {:placeholder "Type a message" :maxlength 100})
-                 (dom/on "keydown" (e/fn [e]
-                                     (when (= "Enter" (.-key e))
-                                       (when-some [v (empty->nil (.. e -target -value))]
-                                         (set! (.-value dom/node) "")
-                                         (reset! !val (e/server (llm/ask-ant v)))))))))
-       (ui4/button (e/fn [] (reset! !val (e/server (llm/vote-top tagid))))
-                   (dom/text "vote top"))
-       (ui4/button (e/fn [] (reset! !val (e/server (llm/vote-pair tagid))))
-                   (dom/text "vote pair"))
-       (ui4/button (e/fn [] (reset! !val (e/server (llm/interpolate tagid))))
-                   (dom/text "interpolate"))
-       (ui4/button (e/fn [] (reset! !val (e/server (llm/extrapolate tagid))))
-                   (dom/text "extrapolate"))
-       (ui4/button (e/fn [] (reset! !val (e/server (llm/inverse tagid))))
-                   (dom/text "inverse"))))))
+       (dom/input
+        (dom/props {:placeholder "Type a message" :maxlength 100})
+        (dom/on "keydown" (e/fn [e]
+                            (when (= "Enter" (.-key e))
+                              (when-some [v (empty->nil (.. e -target -value))]
+                                (set! (.-value dom/node) "")
+                                (reset! !val (e/server (llm/ask-ant v))))))))
+       (dom/h3 (dom/text (str "hello: " val)))))))
