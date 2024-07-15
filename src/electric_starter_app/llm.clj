@@ -47,9 +47,9 @@
                                                            "anthropic-version" "2023-06-01"}
                                             :as           :stream
                                             :content-type :json
-                                            :form-params  {:model      "claude-3-sonnet-20240229"
+                                            :form-params  {:model      "claude-3-5-sonnet-20240620"
                                                            :messages   [{:role "user" :content q}]
-                                                           :max_tokens 100
+                                                           :max_tokens 4096
                                                            :stream     true}})
                               :body)))]
      (loop []
@@ -68,45 +68,7 @@
   
   ([] ""))
 
-(defn test []
-  (m/ap
-   (let [x (m/?> (m/seed ["Hello" "World" "!"]))]
-     (m/? (m/sleep 1000))
-     x)))
-
 (comment
   (def r (ask-ant-stream "hello"))
   (m/? (m/reduce collect (m/ap
-                          (m/?> (ask-ant-stream "hello")))))
-  
-  (m/? (m/reduce conj (m/ap
-                       (let [x (m/?> (m/seed ["Hello" "World" "!"]))]
-                         (m/? (m/sleep 1000))
-                         x))))
-  
-  (m/? (m/reduce conj (m/ap (let [x (m/?> (m/seed [1 2 3 4]))]
-                              (m/? (m/sleep 10))
-                              x))))
-
-  (m/? (m/reduce conj (m/ap
-                       (let [x (m/?> (m/seed ["Hello" "World" "!"]))]
-                         (Thread/sleep 1000)
-                         x))))
-  
-  (m/? (m/reduce conj (m/ap
-                       (println (m/?> (ask-ant-stream "what is the  meaning of life"))))))
-  
-  (m/? (m/reduce conj (m/ap
-                       (println (m/?> (ask-ant-stream "what is the  meaning of life"))))))
-  
-  (def it ((m/reduce #(prn %2) nil (ask-ant-stream "what is the meaning of life"))
-           (partial prn :ok)
-           (partial prn :ex)))
-  
-  
-  (m/? (m/reduce clct (ask-ant-stream "hello")))
-  (m/? (m/reduce conj (ask-ant-stream "hello"))))
-
-
-
-
+                          (m/?> (ask-ant-stream "hello"))))))

@@ -1,4 +1,5 @@
-{:deps {com.hyperfiddle/electric       {:git/url "https://github.com/hyperfiddle/electric" :git/sha "51de4f5f81ebe17a5df406262b17b1c07cee15be"}
+{:deps {com.hyperfiddle/electric {:git/url "https://github.com/hyperfiddle/electric"
+                                  :git/sha "51de4f5f81ebe17a5df406262b17b1c07cee15be"}
         missionary/missionary {:mvn/version "b.34"}
 
         ring/ring                      {:mvn/version "1.11.0"} ; comes with Jetty
@@ -11,6 +12,7 @@
 
         clj-http/clj-http {:mvn/version "3.12.3"}
         selmer {:mvn/version "1.12.59"}
+        duratom/duratom {:mvn/version "0.5.9"}
 
 
         
