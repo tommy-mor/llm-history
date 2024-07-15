@@ -90,8 +90,8 @@
   (e/client
    (binding [dom/node js/document.body]
      (let [!responses (atom []) responses (e/watch !responses)]
-       (dom/pre (dom/text (e/server (clojure.pprint/write (e/watch graph) :stream nil))))
-       (dom/pre (dom/text (pr-str (e/server (e/watch roots)))))
+       #_(dom/pre (dom/text (e/server (clojure.pprint/write (e/watch graph) :stream nil))))
+       #_(dom/pre (dom/text (pr-str (e/server (e/watch roots)))))
        (dom/input
         (dom/props {:placeholder "Type a message" :maxlength 100})
         (dom/on "keydown" (e/fn [e]
@@ -100,4 +100,29 @@
                                 (set! (.-value dom/node) "")
                                 (e/server (swap! roots conj (create-item v))))))))
        (e/for-by identity [root (e/server (e/watch roots))]
-                 (e/client (HistoryBlock. root )))))))
+                 (e/client (HistoryBlock. root )))
+
+       (dom/div (dom/props {:id "cyto"
+                            :style {:width "1000px" :height "1000px"}}))
+       (e/client
+        (let [cy (js/cytoscape (clj->js {:container (js/document.getElementById "cyto")
+                                         :elements (e/server {:nodes (->> (vals (e/watch graph))
+                                                                          (map (fn [x]
+                                                                                 (def x x)
+                                                                                 {:id (str (:id x))
+                                                                                  :data {:id (str (:id x))
+                                                                                         :label (:title x)}})))
+                                                              :edges
+                                                              (->> (vals (e/watch graph))
+                                                                   (map #(for [y (:causes %)]
+                                                                           {:id (str (random-uuid))
+                                                                            :data {:source (:id %) :target y :id (str (random-uuid))}}))
+                                                                   flatten)})
+                                         :style [{:selector "node"
+                                                  :style {:label "data(label)"
+                                                          :text-valign "center"
+                                                          :text-halign "center"}}]
+                                         :layout {:name (do
+                                                          (println "here")
+                                                          "cose")}}))]
+          (println cy)))))))
