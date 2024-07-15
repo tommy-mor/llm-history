@@ -48,7 +48,7 @@
                                             :as           :stream
                                             :content-type :json
                                             :form-params  {:model      "claude-3-5-sonnet-20240620"
-                                                           :messages   [{:role "user" :content q}]
+                                                           :messages   [{:role "user" :content q} {:role "assistant" :content "---"}]
                                                            :max_tokens 4096
                                                            :stream     true}})
                               :body)))]
