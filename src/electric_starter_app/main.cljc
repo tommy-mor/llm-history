@@ -73,45 +73,46 @@
   (reset! graph {})
   (reset! roots []))
 
-(e/defn HistoryBlock [id seen]
-  (e/client
-   (let [data (e/server (get (e/watch graph) id))]
-     
-     (dom/div
-      (dom/props {:style {:display "flex" :background "rgba(255, 100, 100, .1)" :margin-top "30px"}})
-      
-      (dom/div (dom/props {:style {:width "300px" :margin "10px"}})
-               (dom/text (:title data))
-               #_(dom/button
-                  (dom/on "click"
-                          (e/fn [_] (e/server
-                                     (swap! graph dissoc id)
-                                     (swap! roots (fn [f] (filter #(not= % id) f))))))
-                  (dom/text "delete")))
-      (dom/div
-       (let [!show (atom false) show (e/watch !show)]
-         (e/for-by identity [x (:causes data)]
-                   (when (not (contains? seen x))
-                     (HistoryBlock. x (conj seen id))))
-         (if show
-           (let [r (e/server (new (m/reductions llm/collect
-                                                (llm/ask-ant-stream (str "what are the three main events that led to following historical event. Separate them by '---': \""
-                                                                         (:title data))))))]
-             (e/for-by identity [x (clojure.string/split r #"---")]
-                       (let [!instantiated (atom false) instantiated (e/watch !instantiated)]
-                         (when (not instantiated)
-                           (dom/div (dom/props {:style {:background "pink" :margin "10px"}})
-                                    (dom/text x)
-                                    (dom/button
-                                     (dom/on "click" (e/fn [_]
-                                                       (let [new-id (e/server (create-item x id))]
-                                                         (reset! !instantiated new-id)
-                                                         (e/server))))
-                                     (dom/text "save"))))))))
-         (dom/button
-          (dom/on "click"
-                  (e/fn [_] (swap! !show not)))
-          (dom/text "causes>"))))))))
+(e/defn HistoryBlock [id seen !displayed]
+  (when-not (contains? @!displayed id)
+    (reset! !displayed (conj @!displayed id))
+    (e/client
+     (let [data (e/server (get (e/watch graph) id))]
+       
+       (dom/div
+        (dom/props {:style {:display "flex" :background "rgba(255, 100, 100, .1)" :margin-top "30px"}})
+        
+        (dom/div (dom/props {:style {:width "300px" :margin "10px"}})
+                 (dom/text (:title data))
+                 #_(dom/button
+                    (dom/on "click"
+                            (e/fn [_] (e/server
+                                       (swap! graph dissoc id)
+                                       (swap! roots (fn [f] (filter #(not= % id) f))))))
+                    (dom/text "delete")))
+        (dom/div
+         (let [!show (atom false) show (e/watch !show)]
+           (e/for-by identity [x (:causes data)]
+                     (when (not (contains? seen x))
+                       (HistoryBlock. x (conj seen id) !displayed)))
+           (if show
+             (let [r (e/server (new (m/reductions llm/collect
+                                                  (llm/ask-ant-stream (str "what are the three main events that led to following historical event. Separate them by '---': \""
+                                                                           (:title data))))))]
+               (e/for-by identity [x (clojure.string/split r #"---")]
+                         (let [!instantiated (atom false) instantiated (e/watch !instantiated)]
+                           (when (not instantiated)
+                             (dom/div (dom/props {:style {:background "pink" :margin "10px"}})
+                                      (dom/text x)
+                                      (dom/button
+                                       (dom/on "click" (e/fn [_]
+                                                         (let [new-id (e/server (create-item x id))]
+                                                           (reset! !instantiated new-id))))
+                                       (dom/text "save"))))))))
+           (dom/button
+            (dom/on "click"
+                    (e/fn [_] (swap! !show not)))
+            (dom/text "causes>")))))))))
 
 (defn split-words-wrap [text]
   "split by words, insert newlines every 6 words, then rejoin"
@@ -126,9 +127,7 @@
 (e/defn Main [ring-request]
   (e/client
    (binding [dom/node js/document.body]
-     (let [!responses (atom []) responses (e/watch !responses)]
-       #_(dom/pre (dom/text (e/server (clojure.pprint/write (e/watch graph) :stream nil))))
-       #_(dom/pre (dom/text (pr-str (e/server (e/watch roots)))))
+     (let [!displayed (atom #{})]
        (dom/input
         (dom/props {:placeholder "Type a message" :maxlength 100})
         (dom/on "keydown" (e/fn [e]
@@ -141,9 +140,9 @@
                    (if show
                      (dom/div
                       (dom/button (dom/text "hide causes")
-                                 (dom/on "click"
-                                         (e/fn [_] (swap! !show not) ) ) )
-                      (HistoryBlock. root #{root}))
+                                  (dom/on "click"
+                                          (e/fn [_] (swap! !show not) ) ) )
+                      (HistoryBlock. root #{root} !displayed))
                      (dom/div
                       (dom/props {:style {:background "rgba(100, 100, 255, .1)" :margin-top "30px"}})
                       (dom/div
@@ -159,7 +158,7 @@
         (dom/props {:src 
                     (str "data:image/png;base64, "
                          (e/server
-                          (llm/encode (dot/render (dot/dot (dot/graph
+                          (llm/encode (dot/render (dot/dot (dot/digraph
                                                             {}
                                                             (concat
                                                              (->> (e/watch graph) vals (map (fn [node]
