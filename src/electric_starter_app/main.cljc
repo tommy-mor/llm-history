@@ -30,11 +30,8 @@
 
 
 #?(:clj (defn create-item [title parent]
-          (def title "the deployment of russian troops to crimea in late feburary 2014")
           (let [uuid (random-uuid)
                 embedding (llm/get-embedding title)]
-            (def embedding embedding)
-
             (if (not-empty @graph)
               
               (do (def potential-duplicate (apply min-key (fn [x] (llm/embedding-distance embedding (:embedding x)))
@@ -71,21 +68,6 @@
 
 (comment
   (e/server (create-item "american civil war" nil)))
-
-;; Saving this file will automatically recompile and update in your browser
-
-(e/defn Response [v]
-  (let [r (e/server (new (m/reductions llm/collect (llm/ask-ant-stream v))))]
-    (e/client
-     (dom/h4 (dom/text r)))))
-
-#_(e/defn Response [v]
-  (let [r (e/server (m/? (m/reduce conj (m/ap
-                                         (let [x (m/?> (m/seed ["Hello" "World" "!"]))]
-                                           (m/? (m/sleep 10))
-                                           x)))))]
-    (e/client
-     (dom/h4 (dom/text r)))))
 
 (comment
   (reset! graph {})
