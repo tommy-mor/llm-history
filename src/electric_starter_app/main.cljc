@@ -15,11 +15,54 @@
                                     :file-path "file.edn"
                                     :init {})))
 
+#?(:clj (defn is-same-event [e1 e2]
+        (.startsWith (.toLowerCase (llm/ask-ant (str "are these two events the same event?"
+                                                     e1
+                                                     "\" and \""
+                                                     e2
+                                                     "\"? respond with exactly one word"))) "y")))
 
-#?(:clj (defn create-item [title]
-          (let [uuid (random-uuid)]
-            (swap! graph assoc uuid {:id uuid :title title
-                                     :causes [] :effects []})
+(comment
+  (is-same-event "the deployment of russian troops to crimea in late feburary 2014"
+                "the deployment of russian troops to crimea in late feburary 2014")
+  (is-same-event "1. The Euromaidan protests in Ukraine (November 2013 - February 2014) that led to the ousting of pro-Russian President Viktor Yanukovych"
+                 "the deployment of russian troops to ukraine in late feburary 2022"))
+
+
+#?(:clj (defn create-item [title parent]
+          (def title "the deployment of russian troops to crimea in late feburary 2014")
+          (let [uuid (random-uuid)
+                embedding (llm/get-embedding title)]
+            (def embedding embedding)
+
+            (if (not-empty @graph)
+              
+              (do (def potential-duplicate (apply min-key (fn [x] (llm/embedding-distance embedding (:embedding x)))
+                                                  (vals @graph)))
+                  
+                  (def is-same (is-same-event title (:title potential-duplicate)))
+
+                  (if is-same
+                    (when parent
+                      (swap! graph assoc-in [parent :causes]
+                             (conj (get-in @graph [parent :causes]) (:id potential-duplicate))))
+                    
+                    
+                    (do
+                      (swap! graph assoc uuid {:id uuid :title title
+                                               :causes [] :effects []
+                                               :embedding embedding})
+                      (when parent
+                        (swap! graph assoc-in [parent :causes]
+                               (conj (get-in @graph [parent :causes]) uuid))))))
+              
+              (do
+                (swap! graph assoc uuid {:id uuid :title title
+                                         :causes [] :effects []
+                                         :embedding embedding})
+                (when parent
+                  (swap! graph assoc-in [parent :causes]
+                         (conj (get-in @graph [parent :causes]) uuid)))))
             uuid)))
 
 #?(:clj (def roots (duratom/duratom :local-file
@@ -27,7 +70,7 @@
                                     :init [])))
 
 (comment
-  (e/server (create-item "american civil war")))
+  (e/server (create-item "american civil war" nil)))
 
 ;; Saving this file will automatically recompile and update in your browser
 
@@ -48,25 +91,26 @@
   (reset! graph {})
   (reset! roots []))
 
-(e/defn HistoryBlock [id]
+(e/defn HistoryBlock [id seen]
   (e/client
-   
    (let [data (e/server (get (e/watch graph) id))]
+     
      (dom/div
       (dom/props {:style {:display "flex" :background "rgba(255, 100, 100, .1)" :margin-top "30px"}})
       
       (dom/div (dom/props {:style {:width "300px" :margin "10px"}})
                (dom/text (:title data))
                #_(dom/button
-                (dom/on "click"
-                        (e/fn [_] (e/server
-                                   (swap! graph dissoc id)
-                                   (swap! roots (fn [f] (filter #(not= % id) f))))))
-                (dom/text "delete")))
+                  (dom/on "click"
+                          (e/fn [_] (e/server
+                                     (swap! graph dissoc id)
+                                     (swap! roots (fn [f] (filter #(not= % id) f))))))
+                  (dom/text "delete")))
       (dom/div
        (let [!show (atom false) show (e/watch !show)]
          (e/for-by identity [x (:causes data)]
-                   (HistoryBlock. x))
+                   (when (not (contains? seen x))
+                     (HistoryBlock. x (conj seen id))))
          (if show
            (let [r (e/server (new (m/reductions llm/collect
                                                 (llm/ask-ant-stream (str "what are the three main events that led to following historical event. Separate them by '---': \""
@@ -78,11 +122,9 @@
                                     (dom/text x)
                                     (dom/button
                                      (dom/on "click" (e/fn [_]
-                                                       (let [new-id (e/server (create-item x))]
+                                                       (let [new-id (e/server (create-item x id))]
                                                          (reset! !instantiated new-id)
-                                                         (e/server
-                                                          (swap! graph assoc-in [id :causes]
-                                                                 (conj (get-in @graph [id :causes]) new-id))))))
+                                                         (e/server))))
                                      (dom/text "save"))))))))
          (dom/button
           (dom/on "click"
@@ -111,9 +153,26 @@
                             (when (= "Enter" (.-key e))
                               (when-some [v (empty->nil (.. e -target -value))]
                                 (set! (.-value dom/node) "")
-                                (e/server (swap! roots conj (create-item v))))))))
+                                (e/server (swap! roots conj (create-item v nil))))))))
        (e/for-by identity [root (e/server (e/watch roots))]
-                 (e/client (HistoryBlock. root )))
+                 (let [!show (atom false) show (e/watch !show) ]
+                   (if show
+                     (dom/div
+                      (dom/button (dom/text "hide causes")
+                                 (dom/on "click"
+                                         (e/fn [_] (swap! !show not) ) ) )
+                      (HistoryBlock. root #{root}))
+                     (dom/div
+                      (dom/props {:style {:background "rgba(100, 100, 255, .1)" :margin-top "30px"}})
+                      (dom/div
+                       (dom/div (dom/text (:title (e/server (get (e/watch graph) root))))
+                                (dom/button
+                                 (dom/on "click"
+                                         (e/fn [_] (swap! !show not)))
+                                 (dom/text "show causes")) )) )
+                     
+                     
+                     )))
        (dom/img
         (dom/props {:src 
                     (str "data:image/png;base64, "
@@ -127,7 +186,7 @@
                                                                                                 :shape "box"}])))
                                                              (->> (e/watch graph) vals (map (fn [node]
                                                                                               (for [x (:causes node)]
-                                                                                                         [(str (:id node)) (str x)]))))
+                                                                                                [(str (:id node)) (str x)]))))
                                                              )))
                                                   {:format :png}))))
                     :style {:width "100%"}}))))))

@@ -37,7 +37,7 @@
                               "x-api-key" ant-key
                               "anthropic-version" "2023-06-01"}
                     :content-type :json
-                    :form-params {:model "claude-3-sonnet-20240229"
+                    :form-params {:model "claude-3-haiku-20240307"
                                   :messages [{:role "user" :content q}]
                                   :max_tokens 100}})
       :body (json/parse-string true) :content first :text))
