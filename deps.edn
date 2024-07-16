@@ -13,6 +13,7 @@
         clj-http/clj-http {:mvn/version "3.12.3"}
         selmer {:mvn/version "1.12.59"}
         duratom/duratom {:mvn/version "0.5.9"}
+        dorothy/dorothy {:mvn/version "0.0.6"}
 
 
         

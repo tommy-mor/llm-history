@@ -2,10 +2,14 @@
   (:require [clj-http.client :as client]
             [cheshire.core :as json]
             [missionary.core :as m]
-            [selmer.parser :as sel]))
+            [selmer.parser :as sel])
+  (:import java.util.Base64))
 
 (def oai-key (-> "secrets.edn" slurp read-string :openai :api-key))
 (def ant-key (-> "secrets.edn" slurp read-string :anthropic :api-key ))
+
+(defn encode [s]
+  (.encodeToString (Base64/getEncoder) s))
 
 (defn ask-oai [q]
   (-> (client/post "https://api.openai.com/v1/chat/completions"
@@ -58,6 +62,34 @@
              bit (json/parse-string (second (clojure.string/split bit #":" 2)) true)]
          (if (= (:type bit) "message_stop")
            bit (m/amb bit (recur))))))))
+
+(defn get-embedding [text]
+  (-> (client/post "https://api.openai.com/v1/embeddings"
+                   {:headers {"Content-Type" "application/json"
+                              "Authorization" (str "Bearer " oai-key)}
+                    :content-type :json
+                    :form-params {:model "text-embedding-3-small"
+                                  :input text}})
+      :body (json/parse-string true) :data first :embedding))
+
+(defn embedding-distance [x1 x2]
+  (Math/sqrt (reduce + (map (fn [a b] (Math/pow (- a b) 2)) x1 x2))))
+
+(defn is-duplicate [all new]
+  (apply min-key (fn [x] (embedding-distance new x)) all))
+
+
+
+(comment
+  (embedding-distance (get-embedding "the civil war")
+                      (get-embedding "world war 2"))
+  (embedding-distance (get-embedding "circle")
+                      (get-embedding "world war 2"))
+  (is-duplicate [(get-embedding "the civil war")
+                 (get-embedding "world war 2")]
+                (get-embedding "world war 2"))
+  
+  )
 
 (defn collect
   ([sofar next]

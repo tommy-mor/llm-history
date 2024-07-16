@@ -7,11 +7,14 @@
             #?(:clj
                [electric-starter-app.llm :as llm])
             #?(:clj
-               [duratom.core :as duratom])))
+               [duratom.core :as duratom])
+            #?(:clj
+               [dorothy.core :as dot])))
 
-#?(:clj (def graph (duratom :local-file
-                            :file-path "file.edn"
-                            :init {})))
+#?(:clj (def graph (duratom/duratom :local-file
+                                    :file-path "file.edn"
+                                    :init {})))
+
 
 #?(:clj (defn create-item [title]
           (let [uuid (random-uuid)]
@@ -19,9 +22,9 @@
                                      :causes [] :effects []})
             uuid)))
 
-#?(:clj (def roots (duratom :local-file
-                            :file-path "roots.edn"
-                            :init [])))
+#?(:clj (def roots (duratom/duratom :local-file
+                                    :file-path "roots.edn"
+                                    :init [])))
 
 (comment
   (e/server (create-item "american civil war")))
@@ -50,9 +53,9 @@
    
    (let [data (e/server (get (e/watch graph) id))]
      (dom/div
-      (dom/props {:style {:display "flex"}})
-      (dom/div (dom/props {:style {:background "pink"
-                                   :width "300px"}})
+      (dom/props {:style {:display "flex" :background "rgba(255, 100, 100, .1)" :margin-top "30px"}})
+      
+      (dom/div (dom/props {:style {:width "300px" :margin "10px"}})
                (dom/text (:title data))
                #_(dom/button
                 (dom/on "click"
@@ -62,12 +65,12 @@
                 (dom/text "delete")))
       (dom/div
        (let [!show (atom false) show (e/watch !show)]
+         (e/for-by identity [x (:causes data)]
+                   (HistoryBlock. x))
          (if show
            (let [r (e/server (new (m/reductions llm/collect
                                                 (llm/ask-ant-stream (str "what are the three main events that led to following historical event. Separate them by '---': \""
                                                                          (:title data))))))]
-             (e/for-by identity [x (:causes data)]
-                       (HistoryBlock. x))
              (e/for-by identity [x (clojure.string/split r #"---")]
                        (let [!instantiated (atom false) instantiated (e/watch !instantiated)]
                          (when (not instantiated)
@@ -80,11 +83,21 @@
                                                          (e/server
                                                           (swap! graph assoc-in [id :causes]
                                                                  (conj (get-in @graph [id :causes]) new-id))))))
-                                     (dom/text "save")))))))
-           (dom/button
-            (dom/on "click"
-                    (e/fn [_] (swap! !show not)))
-            (dom/text "causes>")))))))))
+                                     (dom/text "save"))))))))
+         (dom/button
+          (dom/on "click"
+                  (e/fn [_] (swap! !show not)))
+          (dom/text "causes>"))))))))
+
+(defn split-words-wrap [text]
+  "split by words, insert newlines every 6 words, then rejoin"
+  (def text text)
+  (clojure.string/join "\n"
+                       (map #(clojure.string/join " " %)
+                            (partition 6 6
+                                       nil
+                                       (clojure.string/split text #" ")
+                                       ))))
 
 (e/defn Main [ring-request]
   (e/client
@@ -101,28 +114,20 @@
                                 (e/server (swap! roots conj (create-item v))))))))
        (e/for-by identity [root (e/server (e/watch roots))]
                  (e/client (HistoryBlock. root )))
-
-       (dom/div (dom/props {:id "cyto"
-                            :style {:width "1000px" :height "1000px"}}))
-       (e/client
-        (let [cy (js/cytoscape (clj->js {:container (js/document.getElementById "cyto")
-                                         :elements (e/server {:nodes (->> (vals (e/watch graph))
-                                                                          (map (fn [x]
-                                                                                 (def x x)
-                                                                                 {:id (str (:id x))
-                                                                                  :data {:id (str (:id x))
-                                                                                         :label (:title x)}})))
-                                                              :edges
-                                                              (->> (vals (e/watch graph))
-                                                                   (map #(for [y (:causes %)]
-                                                                           {:id (str (random-uuid))
-                                                                            :data {:source (:id %) :target y :id (str (random-uuid))}}))
-                                                                   flatten)})
-                                         :style [{:selector "node"
-                                                  :style {:label "data(label)"
-                                                          :text-valign "center"
-                                                          :text-halign "center"}}]
-                                         :layout {:name (do
-                                                          (println "here")
-                                                          "cose")}}))]
-          (println cy)))))))
+       (dom/img
+        (dom/props {:src 
+                    (str "data:image/png;base64, "
+                         (e/server
+                          (llm/encode (dot/render (dot/dot (dot/graph
+                                                            {}
+                                                            (concat
+                                                             (->> (e/watch graph) vals (map (fn [node]
+                                                                                              [(str (:id node))
+                                                                                               {:label (split-words-wrap (:title node))
+                                                                                                :shape "box"}])))
+                                                             (->> (e/watch graph) vals (map (fn [node]
+                                                                                              (for [x (:causes node)]
+                                                                                                         [(str (:id node)) (str x)]))))
+                                                             )))
+                                                  {:format :png}))))
+                    :style {:width "100%"}}))))))
