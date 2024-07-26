@@ -36,36 +36,38 @@
           (let [uuid (random-uuid)
                 embedding (llm/get-embedding title)]
             (def title title)
-            (if (not-empty @graph)
-              
-              
-              (do (def potential-duplicate (apply min-key (fn [x] (llm/embedding-distance embedding (:embedding x)))
-                                                  (vals @graph)))
-                  
-                  (def is-same (is-same-event title (:title potential-duplicate)))
+            (let [ret  (if (not-empty @graph)
+                         
+                         
+                         (do (def potential-duplicate (apply min-key (fn [x] (llm/embedding-distance embedding (:embedding x)))
+                                                             (vals @graph)))
+                             
+                             (def is-same (is-same-event title (:title potential-duplicate)))
 
-                  (if is-same
-                    (do (when parent
-                          (swap! graph assoc-in [parent :causes]
-                                 (conj (get-in @graph [parent :causes]) (:id potential-duplicate))))
-                        false)
-                    (do
-                      (swap! graph assoc uuid {:id uuid :title title
-                                               :causes [] :effects []
-                                               :embedding embedding})
-                      (when parent
-                        (swap! graph assoc-in [parent :causes]
-                               (conj (get-in @graph [parent :causes]) uuid)))
-                      uuid)))
-              
-              (do
-                (swap! graph assoc uuid {:id uuid :title title
-                                         :causes [] :effects []
-                                         :embedding embedding})
-                (when parent
-                  (swap! graph assoc-in [parent :causes]
-                         (conj (get-in @graph [parent :causes]) uuid)))
-                uuid)))))
+                             (if is-same
+                               (do (when parent
+                                     (swap! graph assoc-in [parent :causes]
+                                            (conj (get-in @graph [parent :causes]) (:id potential-duplicate))))
+                                   false)
+                               (do
+                                 (swap! graph assoc uuid {:id uuid :title title
+                                                          :causes [] :effects []
+                                                          :embedding embedding})
+                                 (when parent
+                                   (swap! graph assoc-in [parent :causes]
+                                          (conj (get-in @graph [parent :causes]) uuid)))
+                                 uuid)))
+                         
+                         (do
+                           (swap! graph assoc uuid {:id uuid :title title
+                                                    :causes [] :effects []
+                                                    :embedding embedding})
+                           (when parent
+                             (swap! graph assoc-in [parent :causes]
+                                    (conj (get-in @graph [parent :causes]) uuid)))
+                           uuid))]
+              (render-image)
+              ret))))
 
 #?(:clj (def roots (duratom/duratom :local-file
                                     :file-path "roots.edn"
@@ -77,6 +79,22 @@
 (comment
   (reset! graph {})
   (reset! roots []))
+
+#?(:clj (def image (atom nil)))
+
+#?(:clj (defn render-image []
+          (reset! image (llm/encode (dot/render (dot/dot (dot/digraph
+                                                          {}
+                                                          (concat
+                                                           (->> @graph vals (map (fn [node]
+                                                                                   [(str (:id node))
+                                                                                    {:label (split-words-wrap (:title node))
+                                                                                     :shape "box"}])))
+                                                           (->> @graph vals (map (fn [node]
+                                                                                   (for [x (:causes node)]
+                                                                                     [(str (:id node)) (str x)]))))
+                                                           )))
+                                                {:format :png})))))
 
 (e/defn HistoryBlock [id seen !displayed]
   (e/client
@@ -134,8 +152,10 @@
   (e/client
    (binding [dom/node js/document.body]
      (let [!displayed (atom #{}) !admin (atom false) admin (e/watch !admin)]
+       (dom/text "i am looking for a job: email me at thmorriss at gmail dot com")
+       (dom/br)
        (dom/input
-        (dom/props {:placeholder "Type a message" :maxlength 100})
+        (dom/props {:placeholder "create a root node" :maxlength 100})
         (dom/on "keydown" (e/fn [e]
                             (reset! !admin (= (.. e -target -value) "secretadminpowers"))
                             (when (= "Enter" (.-key e))
@@ -149,7 +169,8 @@
                                 (dom/on "click"
                                         (e/fn [_] (e/server
                                                    (reset! roots (filter #(not= % root) @roots))
-                                                   (swap! graph dissoc root)))) ) ) )
+                                                   (swap! graph dissoc root)
+                                                   (render-image)))) ) ) )
                  (let [!show (atom false) show (e/watch !show) ]
                    (if show
                      (dom/div
@@ -171,17 +192,5 @@
        (dom/img
         (dom/props {:src 
                     (str "data:image/png;base64, "
-                         (e/server
-                          (llm/encode (dot/render (dot/dot (dot/digraph
-                                                            {}
-                                                            (concat
-                                                             (->> (e/watch graph) vals (map (fn [node]
-                                                                                              [(str (:id node))
-                                                                                               {:label (split-words-wrap (:title node))
-                                                                                                :shape "box"}])))
-                                                             (->> (e/watch graph) vals (map (fn [node]
-                                                                                              (for [x (:causes node)]
-                                                                                                [(str (:id node)) (str x)]))))
-                                                             )))
-                                                  {:format :png}))))
-                    :style {:width "100%"}}))))))
+                         (e/server (e/watch image)))
+                    }))))))
